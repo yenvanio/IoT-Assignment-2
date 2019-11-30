@@ -95,19 +95,19 @@ def decodeMessage(s, msgType):
     remnant = None
     if payloadSize < 5:       # includes the mailSize
         raise BufferError('Payload size is too small')
-    
+
     a,b,c,d = struct.unpack_from('<4B', s, 2)
     if a != 1 or b != 0 or c != 0x81 or d != 0x9e:
         raise BufferError('Header is not correct.  Expecting 01 00 81 9e')
-    
+
     mailSize = struct.unpack_from('<B', s, 6)[0]
-    
+
     if payloadSize < (5 + mailSize):  # includes the valueSize
         raise BufferError('Payload size is too small')
-    
+
     mailBytes = struct.unpack_from('<' + str(mailSize) + 's', s, 7)[0]
     mail = mailBytes.decode('ascii')[:-1]
-    
+
     valueSize = struct.unpack_from('<H', s, 7 + mailSize)[0]
     if payloadSize < (7 + mailSize + valueSize):  # includes the valueSize
         raise BufferError('Payload size does not match the packet')
@@ -122,20 +122,20 @@ def decodeMessage(s, msgType):
             raise BufferError('Value size is not four bytes required for Numeric Type')
         value = struct.unpack_from('<f', s, 9 + mailSize)[0]
     else:
-        valueBytes = struct.unpack_from('<' + str(valueSize) + 's', s, 9 + mailSize)[0] 
-        value = valueBytes.decode('ascii')[:-1] 
+        valueBytes = struct.unpack_from('<' + str(valueSize) + 's', s, 9 + mailSize)[0]
+        value = valueBytes.decode('ascii')[:-1]
         if len(s) > (payloadSize + 2):
             remnant = None
         remnant = s[(payloadSize) + 2:]
-        
+
     return (mail, value, remnant)
 
 def encodeMessage(msgType, mail, value):
     mail = mail + '\x00'
-    mailBytes = mail.encode('ascii') 
+    mailBytes = mail.encode('ascii')
     mailSize = len(mailBytes)
     fmt = '<H4BB' + str(mailSize) + 'sH'
-    
+
     if msgType == MessageType.Logic:
         valueSize = 1
         valueBytes = 1 if value is True else 0
@@ -149,7 +149,7 @@ def encodeMessage(msgType, mail, value):
         valueBytes = value.encode('ascii')
         valueSize = len(valueBytes)
         fmt += str(valueSize) + 's'
-    
+
     payloadSize = 7 + mailSize + valueSize
     s = struct.pack(fmt, payloadSize, 0x01, 0x00, 0x81, 0x9e, mailSize, mailBytes, valueSize, valueBytes)
     return s
@@ -157,7 +157,7 @@ def encodeMessage(msgType, mail, value):
 if __name__ == "__main__":
     #Setup Serial Port
     EV3 = serial.Serial('/dev/rfcomm0')
-    
+
     parser = argparse.ArgumentParser()
     parser.add_argument('host', action='store',help='MAC of BT device')
     parser.add_argument('-L','--light', action='store_true', default=False)
@@ -166,19 +166,18 @@ if __name__ == "__main__":
 
     print('Connecting to ' + arg.host)
     tag = SensorTag(arg.host)
-    
-    while(True):
+
+    while(tag.isConnected()):
         if (arg.light or arg.all) and tag.lightmeter is not None:
             tag.lightmeter.enable()
 
         if (arg.light or arg.all) and tag.lightmeter is not None:
                print("Light: ", tag.lightmeter.read())
-        
-        s = encodeMessage(MessageType.Numeric, 'abc', tag.lightmeter.read())
+
+        s = encodeMessage(MessageType.Numeric, 'Light', tag.lightmeter.read())
         print('Sending the following message\n')
         EV3.write(s)
         time.sleep(1)
-        
-    tag.disconnect()
+    error_message = encodeMessage(MessageType.Text, 'Error', 'Stop Operation of Vehicle.')
     del tag
     EV3.close()
